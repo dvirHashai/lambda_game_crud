@@ -1,0 +1,19 @@
+{
+  "name": "game-crud",
+  "version": "1.0.0",
+  "description": "",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.606.0",
+    "express": "^4.17.1",
+    "serverless-dynamodb-local": "^0.2.38",
+    "serverless-http": "^2.3.0",
+    "serverless-offline": "^5.12.1",
+    "serverless-pseudo-parameters": "^2.5.0"
+  },
+  "author": "",
+  "license": "ISC"
+}
