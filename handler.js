@@ -1,6 +1,7 @@
 'use strict';
 
 const AWS = require('aws-sdk');
+const uuid = require('uuid-random');
 
 const ATTACKERS = "attackers";
 const DEFENDERS = "defenders";
@@ -19,50 +20,66 @@ module.exports = {
             }
         }
         console.log("bodyObj: ", bodyObj);
-        if (typeof bodyObj.id === 'undefined' ||
-            typeof bodyObj.attackerGroup === 'undefined' ||
+        if (typeof bodyObj.attackerGroup === 'undefined' ||
             typeof bodyObj.defenderGroup === 'undefined' ||
             typeof bodyObj.players === 'undefined' ||
-            typeof bodyObj.place === 'undefined' ||
-            typeof bodyObj.judge === 'undefined') {
+            typeof bodyObj.place === 'undefined') {
             console.log('Missing parameters');
             return {
                 statusCode: 400
             }
         }
+        let gameId = uuid();
         let putParams = {
             TableName: process.env.DYNAMODB_GAME_TABLE,
             Item: {
-                id: bodyObj.id,
+                gameId: gameId,
                 attackerGroup: bodyObj.attackerGroup,
                 defenderGroup: bodyObj.defenderGroup,
-                players:bodyObj.players,
+                players: bodyObj.players,
                 place: bodyObj.place,
                 winners: "Game is on",
-                Judge: {
-                    id: bodyObj.judge.id,
+                startGameTime: Date.now(),
+                judge: {
+                    playerId: bodyObj.judge.playerId,
+                    tokenId: bodyObj.judge.tokenId,
                     name: bodyObj.judge.name
                 }
             }
         }
         console.log('putParams:', putParams)
+        // let gameActive = isGameActive(putParams.startGameTime);
+       /* if (!!gameActive) {*/
 
-        let putResult = {}
-        try {
-            let dynamodb = new AWS.DynamoDB.DocumentClient()
-            putResult = await dynamodb.put(putParams).promise()
-        } catch (putError) {
-            console.log('There aws a problem putting the kitten')
-            console.log('putParams: ', putParams)
-            console.log('putError: ', putError)
-            return {
-                statusCode: 500
+            let putResult = {}
+            try {
+                let dynamodb = new AWS.DynamoDB.DocumentClient()
+                putResult = await dynamodb.put(putParams).promise()
+            } catch (putError) {
+                console.log('There aws a problem putting the kitten')
+                console.log('putParams: ', putParams)
+                console.log('putError: ', putError)
+                return {
+                    statusCode: 500
+                }
             }
-        }
-        console.log("putResult: ", putResult);
-        return {
-            statusCode: 200
-        }
+            console.log("putResult: ", putResult);
+            return {
+                statusCode: 200,
+                body: JSON.stringify({
+                        gameId: gameId
+                    }
+                )
+            }
+       /* }else {
+            return {
+                statusCode: 403,
+                body: JSON.stringify({
+                        massage: "Game is active"
+                    }
+                )
+            }
+        }*/
 
     },
     list: async (event, context) => {
@@ -96,14 +113,15 @@ module.exports = {
                 statusCode: 200,
                 body: JSON.stringify(scanResult.Items.map(game => {
                     return {
-                        id: game.id,
+                        gameId: game.gameId,
                         attackerGroup: game.attackerGroup,
                         defenderGroup: game.defenderGroup,
                         place: game.place,
                         winners: game.winners,
                         Judge: {
-                            id: game.id,
-                            name: game.name
+                            playerId: game.judge.playerId,
+                            tokenId: game.judge.tokenId,
+                            name: game.judge.name
                         }
                     }
                 }))
@@ -117,18 +135,20 @@ module.exports = {
                 }
 
             }
+            console.log("scanResult: ", scanResult)
             return {
                 statusCode: 200,
                 body: JSON.stringify(scanResult.Item.map(game => {
                     return {
-                        id: game.id,
+                        gameId: game.gameId,
                         attackerGroup: game.attackerGroup,
                         defenderGroup: game.defenderGroup,
                         place: game.place,
                         winners: game.winners,
                         Judge: {
-                            id: game.id,
-                            name: game.name
+                            playerId: game.judge.playerId,
+                            tokenId: game.judge.tokenId,
+                            name: game.judge.name
                         }
                     }
                 }))
@@ -142,19 +162,19 @@ module.exports = {
 
     },
     get: async (event, context) => {
-        console.log("get -> start with event:{} and context: {}", event, context);
+        console.log("get -> start with event: ", event, " and context: ", context);
         console.log("event", event);
-        if (event.queryStringParameters.id === undefined) {
+        if (event.queryStringParameters.gameId === undefined) {
             return {
                 statusCode: 404,
                 massage: "Invalid Input"
             }
         }
-        let id = event.queryStringParameters.id;
+        let gameId = event.queryStringParameters.gameId;
         let getParams = {
             TableName: process.env.DYNAMODB_GAME_TABLE,
             Key: {
-                'id': id
+                'gameId': gameId
             },
 
         };
@@ -180,13 +200,14 @@ module.exports = {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                id: getResult.Item.id,
+                gameId: getResult.Item.gameId,
                 attackerGroup: getResult.Item.attackerGroup,
                 defenderGroup: getResult.Item.defenderGroup,
                 place: getResult.Item.place,
                 winners: getResult.Item.winners,
                 Judge: {
-                    id: getResult.Item.id,
+                    playerId: getResult.Item.playerId,
+                    tokenId: getResult.Item.tokenId,
                     name: getResult.Item.name
                 }
             })
@@ -194,41 +215,39 @@ module.exports = {
     },
     update: async (event, context) => {
         console.log("update -> start with event:{} and context: {}", event, context);
-        console.log("event.queryStringParameters", event.queryStringParameters.id)
+        console.log("event.queryStringParameters", event.queryStringParameters)
         console.log("event.body", event.body)
         let updateParams = {}
-        if (event.queryStringParameters.id === undefined) {
+        if (event.queryStringParameters.gameId === undefined) {
             return {
                 statusCode: 400,
                 massage: "Invalid Input"
             }
         }
         let bodyObj = parsEventToJson(event);
-        console.log("bodyObj: ",bodyObj);
-        if (bodyObj.winners !== undefined) {
-            if (bodyObj.winners === ATTACKERS || bodyObj.winners === DEFENDERS) {
+        console.log("bodyObj: ", bodyObj);
+        if (event.queryStringParameters.winners !== undefined) {
+            if (event.queryStringParameters.winners === ATTACKERS || event.queryStringParameters.winners === DEFENDERS) {
                 let winners = bodyObj.winners;
                 updateParams = winnersParams(winners, event);
 
-            }else {
+            } else {
                 console.log("missing params");
                 return {
                     statusCode: 400
                 }
             }
 
-        } else if (bodyObj.userId !== undefined) {
-            let userId = bodyObj.userId;
-            let response = await fetchPlayer(userId, event);
-            console.log("add user case response: ",response);
-            let player = response;
+        } else if (event.queryStringParameters.playerId !== undefined) {
+            let playerId = event.queryStringParameters.playerId;
+            let player = await fetchPlayer(playerId, event);
+            console.log("add user case response: ", player);
             updateParams = addPlayer(player, event);
 
-        } else if (bodyObj.attackerGroup !== undefined || bodyObj.defenderGroup !== undefined || bodyObj.place !== undefined || bodyObj.judge !== undefined ){
+        } else if (bodyObj.attackerGroup !== undefined || bodyObj.defenderGroup !== undefined || bodyObj.place !== undefined || bodyObj.judge !== undefined) {
             let game = bodyObj
             updateParams = setGameParams(game, event)
-
-        }else {
+        } else {
             console.log("missing params");
             return {
                 statusCode: 400
@@ -260,7 +279,7 @@ module.exports = {
         let deleteParams = {
             TableName: process.env.DYNAMODB_GAME_TABLE,
             Key: {
-                id: event.queryStringParameters.id
+                gameId: event.queryStringParameters.gameId
             }
         }
         let deleteResult = {}
@@ -284,13 +303,13 @@ module.exports = {
 
 };
 
-const fetchPlayer = async (id) => {
+const fetchPlayer = async (playerId) => {
     console.log("Start fetch player func")
     let response = {}
     let getParams = {
         TableName: process.env.DYNAMODB_PLAYERS_TABLE,
         Key: {
-            'id': id
+            'playerId': playerId
         },
     };
     try {
@@ -313,7 +332,7 @@ const winnersParams = (winners, event) => {
     let updateParams = {
         TableName: process.env.DYNAMODB_GAME_TABLE,
         Key: {
-            id: event.queryStringParameters.id
+            gameId: event.queryStringParameters.gameId
         },
         UpdateExpression: "SET winners = :winners",
         ExpressionAttributeValues: {':winners': winners},
@@ -323,11 +342,11 @@ const winnersParams = (winners, event) => {
 }
 
 const addPlayer = (player, event) => {
-    console.log("Start add params func with player: ",player,"and event: ", event);
+    console.log("Start add params func with player: ", player, "and event: ", event);
     let updateParams = {
         TableName: process.env.DYNAMODB_GAME_TABLE,
         Key: {
-            id: event.queryStringParameters.id
+            gameId: event.queryStringParameters.gameId
         },
         UpdateExpression: "SET players = list_append(players,:player)",
         ExpressionAttributeValues: {':player': [player]},
@@ -352,11 +371,11 @@ const parsEventToJson = (event) => {
 };
 
 const setGameParams = (game, event) => {
-    console.log("Start set game params with: ",game,"and event: ",event);
+    console.log("Start set game params with: ", game, "and event: ", event);
     let updateParams = {
         TableName: process.env.DYNAMODB_GAME_TABLE,
         Key: {
-            id: event.queryStringParameters.id
+            gameId: event.queryStringParameters.gameId
         },
         UpdateExpression: "SET attackerGroup = :attackerGroup, defenderGroup = :defenderGroup, place = :place, judge= :judge ",
         ExpressionAttributeValues: {
@@ -364,12 +383,17 @@ const setGameParams = (game, event) => {
             ":defenderGroup": game.defenderGroup,
             ":place": game.place,
             ":judge": {
-                "id": game.judge.id,
+                "playerId": game.judge.playerId,
                 "name": game.judge.name
             }
         },
         ReturnValues: 'UPDATED_NEW'
     };
-    console.log("setGameParams-> updateParams: ",updateParams);
+    console.log("setGameParams-> updateParams: ", updateParams);
     return updateParams;
-}
+};
+// const isGameActive = (gameTime) => {
+//  let FiveMinute = 5*60*1000;
+//  console.log("isGameActive: ",((new Date.now()) - gameTime) > FiveMinute);
+//     return ((new Date.now()) - gameTime) > FiveMinute
+// };

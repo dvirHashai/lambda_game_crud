@@ -12,7 +12,8 @@
     "serverless-dynamodb-local": "^0.2.38",
     "serverless-http": "^2.3.0",
     "serverless-offline": "^5.12.1",
-    "serverless-pseudo-parameters": "^2.5.0"
+    "serverless-pseudo-parameters": "^2.5.0",
+    "uuid-random": "^1.3.0"
   },
   "author": "",
   "license": "ISC"

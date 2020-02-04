@@ -95,21 +95,21 @@ functions:
     handler: handler.get
     events:
       - http:
-          path: /game/{id}
+          path: /game/{gameId}
           method: get
 
   update:
     handler: handler.update
     events:
       - http:
-          path: /game/{id}
+          path: /game/{gameId}
           method: put
 
   delete:
     handler: handler.delete
     events:
       - http:
-          path: /game/{id}
+          path: /game/{gameId}
           method: delete
 
 #    The following are a few example events you can configure
@@ -155,16 +155,20 @@ functions:
 # you can add CloudFormation resource templates here
 resources:
   Resources:
-    kittenTable:
+    gameTable:
       Type: 'AWS::DynamoDB::Table'
       Properties:
         TableName: ${self:service}-nerf-${opt:stage}
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: gameId
             AttributeType: S
+          - AttributeName: startGameTime
+            AttributeType: N
         KeySchema:
-          - AttributeName: id
+          - AttributeName: gameId
             KeyType: HASH
+          - AttributeName: startGameTime
+            KeyType: RANGE
         BillingMode: PAY_PER_REQUEST
 #    nerfGame:
 #      Type: AWS::ApiGateway::RestApi
