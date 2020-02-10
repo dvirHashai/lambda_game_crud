@@ -24,142 +24,36 @@ module.exports = {
             typeof bodyObj.defenderGroup === 'undefined' ||
             typeof bodyObj.players === 'undefined' ||
             typeof bodyObj.place === 'undefined') {
-            console.log('Missing parameters');
+            console.log('Missing parameters ');
             return {
                 statusCode: 400
             }
         }
-        let gameId = uuid();
-        let putParams = {
-            TableName: process.env.DYNAMODB_GAME_TABLE,
-            Item: {
-                gameId: gameId,
-                attackerGroup: bodyObj.attackerGroup,
-                defenderGroup: bodyObj.defenderGroup,
-                players: bodyObj.players,
-                place: bodyObj.place,
-                winners: "Game is on",
-                startGameTime: Date.now(),
-                judge: {
-                    playerId: bodyObj.judge.playerId,
-                    tokenId: bodyObj.judge.tokenId,
-                    name: bodyObj.judge.name
+        let gameList = await fetchGameList();
+        let gameListObj = parsEventToJson(gameList);
+        console.log("create -> gameList: ", gameListObj);
+        if (!!gameListObj) {
+            let activeGame = findActiveGame(gameListObj);
+            console.log("create -> activeGame: ", activeGame);
+            if (!!activeGame ) {
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify(activeGame)
                 }
+            } else {
+               return  await createGame(bodyObj);
+
             }
         }
-        console.log('putParams:', putParams)
-        // let gameActive = isGameActive(putParams.startGameTime);
-       /* if (!!gameActive) {*/
+        return {
+            statusCode: 404,
+            body: JSON.stringify("Create the first game.")
 
-            let putResult = {}
-            try {
-                let dynamodb = new AWS.DynamoDB.DocumentClient()
-                putResult = await dynamodb.put(putParams).promise()
-            } catch (putError) {
-                console.log('There aws a problem putting the kitten')
-                console.log('putParams: ', putParams)
-                console.log('putError: ', putError)
-                return {
-                    statusCode: 500
-                }
-            }
-            console.log("putResult: ", putResult);
-            return {
-                statusCode: 200,
-                body: JSON.stringify({
-                        gameId: gameId
-                    }
-                )
-            }
-       /* }else {
-            return {
-                statusCode: 403,
-                body: JSON.stringify({
-                        massage: "Game is active"
-                    }
-                )
-            }
-        }*/
-
+        };
     },
     list: async (event, context) => {
         console.log("list -> start with event:{} and context: {}", event, context);
-        let scanParams = {
-            TableName: process.env.DYNAMODB_GAME_TABLE
-        };
-        console.log('scanParams', scanParams);
-        let scanResult = {};
-        try {
-            let dynamodb = new AWS.DynamoDB.DocumentClient();
-            scanResult = await dynamodb.scan(scanParams).promise()
-        } catch (scanError) {
-            console.log('There aws a problem scanning the kitten')
-            console.log('scanParams', scanParams)
-            console.log('scanError', scanError)
-            return {
-                statusCode: 500
-            }
-        }
-        console.log("scanResult", scanResult);
-        if (scanResult.Items !== null) {
-            if (!Array.isArray(scanResult.Items) ||
-                scanResult.Items.length === 0) {
-                return {
-                    statusCode: 404
-                }
-            }
-
-            return {
-                statusCode: 200,
-                body: JSON.stringify(scanResult.Items.map(game => {
-                    return {
-                        gameId: game.gameId,
-                        attackerGroup: game.attackerGroup,
-                        defenderGroup: game.defenderGroup,
-                        place: game.place,
-                        winners: game.winners,
-                        Judge: {
-                            playerId: game.judge.playerId,
-                            tokenId: game.judge.tokenId,
-                            name: game.judge.name
-                        }
-                    }
-                }))
-            }
-
-        } else if (scanResult.Item !== null) {
-            if (!Array.isArray(scanResult.Item) ||
-                scanResult.Item.length === 0) {
-                return {
-                    statusCode: 404
-                }
-
-            }
-            console.log("scanResult: ", scanResult)
-            return {
-                statusCode: 200,
-                body: JSON.stringify(scanResult.Item.map(game => {
-                    return {
-                        gameId: game.gameId,
-                        attackerGroup: game.attackerGroup,
-                        defenderGroup: game.defenderGroup,
-                        place: game.place,
-                        winners: game.winners,
-                        Judge: {
-                            playerId: game.judge.playerId,
-                            tokenId: game.judge.tokenId,
-                            name: game.judge.name
-                        }
-                    }
-                }))
-            }
-        }
-
-        return {
-            statusCode: 404
-        }
-
-
+        return await fetchGameList();
     },
     get: async (event, context) => {
         console.log("get -> start with event: ", event, " and context: ", context);
@@ -200,15 +94,17 @@ module.exports = {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                gameId: getResult.Item.gameId,
-                attackerGroup: getResult.Item.attackerGroup,
-                defenderGroup: getResult.Item.defenderGroup,
-                place: getResult.Item.place,
-                winners: getResult.Item.winners,
+                gameId: getResult.Item.gameId !== undefined ? getResult.Item.gameId : "",
+                attackerGroup: getResult.Item.attackerGroup !== undefined ? getResult.Item.attackerGroup : "",
+                defenderGroup: getResult.Item.defenderGroup !== undefined ? getResult.Item.defenderGroup : "",
+                place: getResult.Item.place !== undefined ? getResult.Item.place : "",
+                winners: getResult.Item.winners !== undefined ? getResult.Item.winners : "",
+                players: getResult.Item.players !== undefined ? getResult.Item.players : "",
+                isActive: getResult.Item.isActive !== undefined ? getResult.Item.isActive : "",
                 Judge: {
-                    playerId: getResult.Item.playerId,
-                    tokenId: getResult.Item.tokenId,
-                    name: getResult.Item.name
+                    playerId: getResult.Item.playerId !== undefined ? getResult.Item.playerId : "",
+                    tokenId: getResult.Item.tokenId !== undefined ? getResult.Item.tokenId : "",
+                    name: getResult.Item.name !== undefined ? getResult.Item.name : ""
                 }
             })
         }
@@ -238,8 +134,8 @@ module.exports = {
                 }
             }
 
-        } else if (event.queryStringParameters.playerId !== undefined) {
-            let playerId = event.queryStringParameters.playerId;
+        } else if (bodyObj.playerId !== undefined) {
+            let playerId = bodyObj.playerId;
             let player = await fetchPlayer(playerId, event);
             console.log("add user case response: ", player);
             updateParams = addPlayer(player, event);
@@ -334,8 +230,11 @@ const winnersParams = (winners, event) => {
         Key: {
             gameId: event.queryStringParameters.gameId
         },
-        UpdateExpression: "SET winners = :winners",
-        ExpressionAttributeValues: {':winners': winners},
+        UpdateExpression: "SET winners = :winners, isActive = :isActive",
+        ExpressionAttributeValues: {
+            ':winners': winners,
+            ':isActive': false
+        },
         ReturnValues: 'UPDATED_NEW'
     };
     return updateParams;
@@ -392,8 +291,148 @@ const setGameParams = (game, event) => {
     console.log("setGameParams-> updateParams: ", updateParams);
     return updateParams;
 };
-// const isGameActive = (gameTime) => {
-//  let FiveMinute = 5*60*1000;
-//  console.log("isGameActive: ",((new Date.now()) - gameTime) > FiveMinute);
-//     return ((new Date.now()) - gameTime) > FiveMinute
-// };
+
+const fetchGameList = async () => {
+    let scanParams = {
+        TableName: process.env.DYNAMODB_GAME_TABLE
+    };
+    console.log('scanParams', scanParams);
+    let scanResult = {};
+    try {
+        let dynamodb = new AWS.DynamoDB.DocumentClient();
+        scanResult = await dynamodb.scan(scanParams).promise()
+    } catch (scanError) {
+        console.log('There aws a problem scanning the kitten')
+        console.log('scanParams', scanParams)
+        console.log('scanError', scanError)
+        return {
+            statusCode: 500
+        }
+    }
+    console.log("scanResult", scanResult);
+    if (scanResult.Items !== null) {
+        if (!Array.isArray(scanResult.Items) ||
+            scanResult.Items.length === 0) {
+            return {
+                statusCode: 404
+            }
+        }
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify(scanResult.Items.map(game => {
+                return {
+                    gameId: game.gameId !== undefined ? game.gameId : "",
+                    attackerGroup: game.attackerGroup !== undefined ? game.attackerGroup : "",
+                    defenderGroup: game.defenderGroup !== undefined ? game.defenderGroup : "",
+                    place: game.place !== undefined ? game.place : "",
+                    winners: game.winners !== undefined ? game.winners : "",
+                    players: game.players !== undefined ? game.players : "",
+                    isActive: game.isActive !== undefined ? game.isActive : "",
+                    Judge: {
+                        playerId: game.judge !== undefined && game.judge.playerId !== undefined ? game.judge.playerId : "",
+                        tokenId: game.judge !== undefined && game.judge.tokenId !== undefined ? game.judge.tokenId : "",
+                        name: game.judge !== undefined && game.judge.name !== undefined ? game.judge.name : ""
+                    }
+                }
+            }))
+        }
+
+    } else if (scanResult.Item !== null) {
+        if (!Array.isArray(scanResult.Item) ||
+            scanResult.Item.length === 0) {
+            return {
+                statusCode: 404
+            }
+
+        }
+        console.log("scanResult: ", scanResult)
+        return {
+            statusCode: 200,
+            body: JSON.stringify(scanResult.Item.map(game => {
+                return {
+                    gameId: game.gameId !== undefined ? game.gameId : "",
+                    attackerGroup: game.attackerGroup !== undefined ? game.attackerGroup : "",
+                    defenderGroup: game.defenderGroup !== undefined ? game.defenderGroup : "",
+                    place: game.place !== undefined ? game.place : "",
+                    winners: game.winners !== undefined ? game.winners : "",
+                    players: game.players !== undefined ? game.players : "",
+                    isActive: game.isActive !== undefined ? game.isActive : "",
+                    Judge: {
+                        playerId: game.judge !== undefined && game.judge.playerId !== undefined ? game.judge.playerId : "",
+                        tokenId: game.judge !== undefined && game.judge.tokenId !== undefined ? game.judge.tokenId : "",
+                        name: game.judge !== undefined && game.judge.name !== undefined ? game.judge.name : ""
+                    }
+                }
+            }))
+        }
+    }
+
+    return {
+        statusCode: 404
+    }
+
+};
+
+const findActiveGame = (gameList) => {
+    if(!!gameList){
+        if (gameList.length >= 1) {
+            let game = gameList.filter(game => {
+                return game.isActive === true
+            }).map(res => {
+                return {gameList: res};
+            });
+            console.log("findActiveGame -> game: ", typeof game);
+            if (game !== undefined && game.length > 0) {
+                return game;
+            }
+            return false;
+        } else if (gameList.isActive === true) {
+            return gameList;
+        }
+    }
+    return false
+};
+
+const createGame = async (bodyObj) => {
+    let gameId = uuid();
+    let putParams = {
+        TableName: process.env.DYNAMODB_GAME_TABLE,
+        Item: {
+            gameId: gameId,
+            attackerGroup: bodyObj.attackerGroup,
+            defenderGroup: bodyObj.defenderGroup,
+            players: bodyObj.players,
+            place: bodyObj.place,
+            winners: "Game is on",
+            startGameTime: Date.now(),
+            isActive: true,
+            judge: {
+                playerId: bodyObj.judge.playerId,
+                tokenId: bodyObj.judge.tokenId,
+                name: bodyObj.judge.name
+            }
+        }
+    }
+    console.log('putParams:', putParams)
+    let putResult = {}
+    try {
+        let dynamodb = new AWS.DynamoDB.DocumentClient()
+        putResult = await dynamodb.put(putParams).promise()
+    } catch (putError) {
+        console.log('There aws a problem putting the kitten')
+        console.log('putParams: ', putParams)
+        console.log('putError: ', putError)
+        return {
+            statusCode: 500
+        }
+    }
+    console.log("putResult: ", putResult);
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+                gameId: gameId
+            }
+        )
+    }
+};

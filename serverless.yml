@@ -24,7 +24,7 @@ provider:
   name: aws
   runtime: nodejs12.x
   # you can overwrite defaults here
-  #  stage: dev
+  stage: ${opt:stage}
   region: eu-central-1
   # you can define service wide environment variables here
   environment:
@@ -85,18 +85,21 @@ functions:
       - http:
           path: /game
           method: post
+          cors: true
   list:
     handler: handler.list
     events:
       - http:
           path: /game
           method: get
+          cors: true
   get:
     handler: handler.get
     events:
       - http:
           path: /game/{gameId}
           method: get
+          cors: true
 
   update:
     handler: handler.update
@@ -104,6 +107,7 @@ functions:
       - http:
           path: /game/{gameId}
           method: put
+          cors: true
 
   delete:
     handler: handler.delete
@@ -111,6 +115,7 @@ functions:
       - http:
           path: /game/{gameId}
           method: delete
+          cors: true
 
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
@@ -162,13 +167,9 @@ resources:
         AttributeDefinitions:
           - AttributeName: gameId
             AttributeType: S
-          - AttributeName: startGameTime
-            AttributeType: N
         KeySchema:
           - AttributeName: gameId
             KeyType: HASH
-          - AttributeName: startGameTime
-            KeyType: RANGE
         BillingMode: PAY_PER_REQUEST
 #    nerfGame:
 #      Type: AWS::ApiGateway::RestApi
